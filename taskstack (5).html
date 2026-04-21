@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Stack</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #F5F4F0; --surface: #FFFFFF; --surface-alt: #EFEFEB;
+  --border: rgba(0,0,0,0.08); --border-med: rgba(0,0,0,0.13);
+  --text-primary: #1A1A18; --text-secondary: #6B6B67; --text-muted: #A8A8A4;
+  --green: #3B6D11; --green-bg: #EAF3DE; --green-mid: #97C459;
+  --amber: #854F0B; --amber-bg: #FAEEDA; --amber-mid: #EF9F27;
+  --blue: #185FA5; --blue-bg: #E6F1FB;
+  --red: #A32D2D; --red-bg: #FCEBEB; --red-mid: #E24B4A;
+  --teal: #0F6E56; --teal-bg: #E1F5EE;
+  --font: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+  --r-sm: 10px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px;
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-lift: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-modal: 0 24px 64px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.1);
+}
+body { font-family: var(--font); background: var(--bg); color: var(--text-primary); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+.app-shell { width: 100%; max-width: 420px; }
+
+/* HEADER */
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding: 0 2px; }
+.header-title { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
+.header-actions { display: flex; gap: 8px; }
+.icon-btn { width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; color: var(--text-secondary); }
+.icon-btn:hover { background: var(--surface-alt); }
+.icon-btn.active { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
+.icon-btn:disabled { opacity: 0.3; cursor: default; }
+.header-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; padding: 0 2px; }
+
+/* CARD STACK */
+.stack-scene { position: relative; height: 440px; margin-bottom: 24px; }
+.task-card { position: absolute; width: 100%; background: var(--surface); border-radius: var(--r-xl); border: 1px solid var(--border); box-shadow: var(--shadow-lift); padding: 24px; cursor: grab; user-select: none; transform-origin: 50% 110%; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s; touch-action: none; }
+.task-card:active { cursor: grabbing; }
+.task-card.card-0 { z-index: 3; }
+.task-card.card-1 { z-index: 2; transform: scale(0.96) translateY(10px); box-shadow: var(--shadow-card); pointer-events: none; }
+.task-card.card-2 { z-index: 1; transform: scale(0.92) translateY(20px); box-shadow: none; pointer-events: none; }
+.task-card.dragging { transition: none; box-shadow: var(--shadow-lift); }
+.task-card.fly-left  { transform: translateX(-130%) rotate(-18deg); transition: transform 0.35s cubic-bezier(0.4,0,0.8,0.6); }
+.task-card.fly-right { transform: translateX(130%) rotate(18deg);  transition: transform 0.35s cubic-bezier(0.4,0,0.8,0.6); }
+.swipe-hint { position: absolute; top: 22px; padding: 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity 0.12s; z-index: 10; }
+.swipe-hint.left  { left: 20px;  background: var(--amber-bg); color: var(--amber); }
+.swipe-hint.right { right: 20px; background: var(--green-bg); color: var(--green); }
+.card-course-tag { font-family: var(--mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 4px; }
+.card-title { font-size: 19px; font-weight: 600; letter-spacing: -0.3px; line-height: 1.25; margin-bottom: 12px; }
+.card-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.meta-pill { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); }
+.meta-pill svg { flex-shrink: 0; }
+.due-urgent { color: var(--red); }
+.grade-badge { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--text-secondary); background: var(--surface-alt); padding: 4px 10px; border-radius: 100px; }
+.card-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px; }
+.progress-block { margin-bottom: 24px; }
+.progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.progress-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.5px; color: var(--text-muted); }
+.progress-pct { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.progress-track { height: 5px; background: var(--surface-alt); border-radius: 100px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 100px; background: var(--text-primary); transition: width 0.5s ease; }
+.start-btn { width: 100%; padding: 15px; background: var(--text-primary); color: #fff; border: none; border-radius: var(--r-lg); font-family: var(--font); font-size: 15px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.15s, transform 0.1s; letter-spacing: -0.1px; }
+.start-btn:hover { opacity: 0.88; }
+.start-btn:active { transform: scale(0.98); }
+
+/* BOTTOM NAV */
+.bottom-nav { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.nav-action { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); cursor: pointer; padding: 8px 10px; border-radius: var(--r-sm); transition: color 0.15s, background 0.15s; border: none; background: none; font-family: var(--font); }
+.nav-action:hover { color: var(--text-primary); background: var(--surface-alt); }
+.nav-count { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+.nav-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); }
+.nav-dot.active { background: var(--text-primary); }
+
+/* TIMER */
+.timer-view { display: none; flex-direction: column; align-items: center; min-height: 560px; padding: 16px 0 0; }
+.timer-view.active { display: flex; }
+.stack-view.hidden { display: none; }
+.timer-back { align-self: flex-start; display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-muted); cursor: pointer; padding: 6px 0; border: none; background: none; font-family: var(--font); margin-bottom: 32px; transition: color 0.15s; }
+.timer-back:hover { color: var(--text-primary); }
+.timer-course { font-family: var(--mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 6px; text-align: center; }
+.timer-task-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; text-align: center; margin-bottom: 48px; }
+.timer-circle-wrap { position: relative; width: 200px; height: 200px; margin-bottom: 16px; }
+.timer-svg { transform: rotate(-90deg); }
+.timer-ring-bg { fill: none; stroke: var(--surface-alt); stroke-width: 6; }
+.timer-ring-fg { fill: none; stroke: var(--text-primary); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+.timer-inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.timer-digits { font-size: 42px; font-weight: 300; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums; }
+.timer-mode-label { font-size: 11px; color: var(--text-muted); margin-top: 6px; letter-spacing: 1px; text-transform: uppercase; font-family: var(--mono); }
+.timer-play-btn { width: 56px; height: 56px; border-radius: 50%; background: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; margin: 28px 0 32px; transition: opacity 0.15s, transform 0.1s; color: #fff; }
+.timer-play-btn:hover { opacity: 0.82; }
+.timer-play-btn:active { transform: scale(0.94); }
+.session-label { font-family: var(--mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 14px; }
+.session-dots { display: flex; gap: 8px; margin-bottom: 40px; }
+.session-dot { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--border-med); background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-muted); transition: all 0.2s; }
+.session-dot.done { background: var(--text-primary); border-color: var(--text-primary); color: #fff; }
+.session-dot.active { border-color: var(--text-primary); color: var(--text-primary); font-weight: 600; }
+.overall-progress-wrap { width: 100%; border-top: 1px solid var(--border); padding-top: 20px; margin-top: auto; }
+.overall-progress-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.overall-progress-label { font-size: 13px; color: var(--text-secondary); }
+.overall-progress-val { font-size: 13px; color: var(--text-muted); font-family: var(--mono); }
+.overall-track { height: 4px; background: var(--surface-alt); border-radius: 100px; overflow: hidden; margin-bottom: 10px; }
+.overall-fill { height: 100%; background: var(--text-primary); border-radius: 100px; }
+.end-session-btn { width: 100%; padding: 13px; background: none; border: 1px solid var(--border-med); border-radius: var(--r-md); font-family: var(--font); font-size: 14px; color: var(--text-secondary); cursor: pointer; transition: background 0.15s, color 0.15s; margin-top: 12px; }
+.end-session-btn:hover { background: var(--surface-alt); color: var(--text-primary); }
+
+/* EMPTY */
+.empty-state { display: none; flex-direction: column; align-items: center; justify-content: center; height: 440px; text-align: center; color: var(--text-muted); gap: 12px; }
+.empty-state.show { display: flex; }
+.empty-icon { width: 52px; height: 52px; border-radius: 50%; background: var(--surface-alt); display: flex; align-items: center; justify-content: center; }
+
+/* UNDO TOAST */
+.undo-toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text-primary); color: #fff; border-radius: 100px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.25s cubic-bezier(0.34,1.56,0.64,1); z-index: 200; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+.undo-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.undo-toast-label { color: rgba(255,255,255,0.7); }
+.undo-toast-task { font-weight: 500; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.undo-btn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; border-radius: 100px; padding: 6px 14px; font-size: 13px; font-weight: 500; font-family: var(--font); cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 6px; }
+.undo-btn:hover { background: rgba(255,255,255,0.25); }
+
+/* ── FILTER DROPDOWN ── */
+.filter-dropdown { position: absolute; top: calc(100% + 8px); right: 0; background: var(--surface); border: 1px solid var(--border-med); border-radius: var(--r-md); box-shadow: var(--shadow-modal); width: 220px; padding: 8px; z-index: 100; opacity: 0; pointer-events: none; transform: translateY(-6px) scale(0.97); transform-origin: top right; transition: opacity 0.18s, transform 0.18s cubic-bezier(0.34,1.4,0.64,1); }
+.filter-dropdown.open { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+.filter-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.6px; color: var(--text-muted); padding: 6px 10px 4px; text-transform: uppercase; }
+.filter-option { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-radius: var(--r-sm); font-size: 13px; color: var(--text-secondary); cursor: pointer; transition: background 0.12s, color 0.12s; border: none; background: none; font-family: var(--font); width: 100%; text-align: left; }
+.filter-option:hover { background: var(--surface-alt); color: var(--text-primary); }
+.filter-option.active { color: var(--text-primary); font-weight: 500; }
+.filter-check { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--border-med); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.12s, border-color 0.12s; }
+.filter-option.active .filter-check { background: var(--text-primary); border-color: var(--text-primary); }
+.filter-divider { height: 1px; background: var(--border); margin: 6px 0; }
+.header-actions { position: relative; display: flex; gap: 8px; }
+
+/* ── CALENDAR OVERLAY ── */
+.cal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.22s; z-index: 150; padding: 20px; }
+.cal-overlay.open { opacity: 1; pointer-events: auto; }
+.cal-sheet { width: 100%; max-width: 460px; background: var(--surface); border-radius: 24px; padding: 0 0 28px; transform: translateY(20px) scale(0.97); transition: transform 0.3s cubic-bezier(0.34,1.3,0.64,1); max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-modal); }
+.cal-overlay.open .cal-sheet { transform: translateY(0) scale(1); }
+.cal-handle { display: none; }
+.cal-top { display: flex; align-items: center; justify-content: space-between; padding: 20px 20px 0; }
+.cal-top-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+.cal-close { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-alt); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); transition: background 0.15s; flex-shrink: 0; }
+.cal-close:hover { background: var(--border-med); }
+
+/* week overview */
+.week-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; padding: 18px 16px 0; }
+.day-col { display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; padding: 6px 2px 8px; border-radius: var(--r-md); transition: background 0.15s; }
+.day-col:hover { background: var(--surface-alt); }
+.day-col.selected { background: var(--surface-alt); }
+.day-lbl { font-family: var(--mono); font-size: 10px; letter-spacing: 0.5px; color: var(--text-muted); text-transform: uppercase; }
+.day-num-circle { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: var(--text-secondary); transition: background 0.15s, color 0.15s; }
+.day-col.today .day-num-circle { background: var(--text-primary); color: #fff; }
+.day-bar-area { width: 24px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.day-bar { width: 100%; border-radius: 3px; min-height: 3px; }
+.day-task-count { font-size: 10px; color: var(--text-muted); font-family: var(--mono); line-height: 1; }
+
+/* divider + sections */
+.cal-divider { height: 1px; background: var(--border); margin: 16px 20px 0; }
+
+/* Today alert banner */
+.today-alert { margin: 14px 20px 0; border-radius: var(--r-md); padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; }
+.today-alert.alert-urgent { background: var(--red-bg); }
+.today-alert.alert-ok { background: var(--green-bg); }
+.today-alert.alert-neutral { background: var(--surface-alt); }
+.alert-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.alert-dot.red { background: var(--red-mid); }
+.alert-dot.green { background: var(--green-mid); }
+.alert-dot.gray { background: var(--text-muted); }
+.alert-text { font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.alert-text strong { color: var(--text-primary); font-weight: 600; }
+
+/* day detail */
+.day-detail-hdr { display: flex; align-items: baseline; gap: 8px; padding: 16px 20px 0; }
+.detail-date-label { font-size: 15px; font-weight: 600; }
+.detail-count-label { font-size: 13px; color: var(--text-muted); }
+
+.task-list { padding: 10px 20px 0; display: flex; flex-direction: column; gap: 10px; }
+
+.cal-task-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 16px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; position: relative; overflow: hidden; }
+.cal-task-row:hover { border-color: var(--border-med); box-shadow: var(--shadow-card); }
+.cal-task-row::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+.urgency-high::before { background: var(--red-mid); }
+.urgency-med::before  { background: var(--amber-mid); }
+.urgency-low::before  { background: var(--green-mid); }
+
+.cal-task-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.cal-task-title { font-size: 14px; font-weight: 500; line-height: 1.3; }
+.urg-badge { font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 100px; flex-shrink: 0; white-space: nowrap; }
+.urg-high { background: var(--red-bg);   color: var(--red); }
+.urg-med  { background: var(--amber-bg); color: var(--amber); }
+.urg-low  { background: var(--green-bg); color: var(--green); }
+
+.cal-task-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.cal-meta-course { font-family: var(--mono); font-size: 10px; color: var(--text-muted); letter-spacing: 0.4px; }
+.cal-meta-time { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 3px; }
+.cal-meta-grade { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+
+.cal-prog-track { height: 3px; background: var(--surface-alt); border-radius: 100px; overflow: hidden; }
+.cal-prog-fill { height: 100%; border-radius: 100px; }
+.pfill-high { background: var(--red-mid); }
+.pfill-med  { background: var(--amber-mid); }
+.pfill-low  { background: var(--green-mid); }
+
+.cal-prog-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.cal-prog-lbl { font-family: var(--mono); font-size: 10px; color: var(--text-muted); letter-spacing: 0.4px; }
+.cal-prog-pct { font-size: 11px; color: var(--text-muted); }
+
+.focus-cta { margin: 16px 20px 0; width: calc(100% - 40px); padding: 14px; background: var(--text-primary); color: #fff; border: none; border-radius: var(--r-lg); font-family: var(--font); font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.15s; }
+.focus-cta:hover { opacity: 0.85; }
+
+.no-tasks-msg { padding: 36px 20px; text-align: center; color: var(--text-muted); font-size: 14px; }
+.no-tasks-msg .emoji { font-size: 28px; display: block; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- STACK VIEW -->
+  <div class="stack-view" id="stackView">
+    <div class="header">
+      <span class="header-title">Task Stack</span>
+      <div class="header-actions">
+        <button class="icon-btn" id="undoBtn" title="Undo" disabled>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 7.5A5 5 0 1 1 5.5 12"/><path d="M3 4v3.5h3.5"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="calBtn" title="Week view">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="1.5" y="2.5" width="13" height="12" rx="2"/>
+            <path d="M1.5 6h13M5 1.5v2M11 1.5v2"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="filterBtn" title="Filter">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M2 4h12M4.5 8h7M7 12h2"/>
+          </svg>
+        </button>
+        <!-- Filter Dropdown -->
+        <div class="filter-dropdown" id="filterDropdown">
+          <div class="filter-label">Sort cards by</div>
+          <button class="filter-option active" data-sort="dueDay" id="sort-dueDay">
+            <span>Due date</span>
+            <span class="filter-check">
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" stroke-width="1.8"><path d="M1 4l2 2 4-4"/></svg>
+            </span>
+          </button>
+          <button class="filter-option" data-sort="gradeWeight" id="sort-gradeWeight">
+            <span>Grade weight</span>
+            <span class="filter-check">
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" stroke-width="1.8"><path d="M1 4l2 2 4-4"/></svg>
+            </span>
+          </button>
+          <button class="filter-option" data-sort="timeToComplete" id="sort-timeToComplete">
+            <span>Time to complete</span>
+            <span class="filter-check">
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" stroke-width="1.8"><path d="M1 4l2 2 4-4"/></svg>
+            </span>
+          </button>
+          <div class="filter-divider"></div>
+          <button class="filter-option" data-sort="progress" id="sort-progress">
+            <span>Least progress</span>
+            <span class="filter-check">
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" stroke-width="1.8"><path d="M1 4l2 2 4-4"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="header-sub" id="headerSub">6 tasks · Sorted by due date</div>
+
+    <div class="stack-scene" id="stackScene">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" color="var(--text-muted)"><path d="M11 4v14M4 11h14"/></svg>
+        </div>
+        <span style="font-size:15px;font-weight:500;color:var(--text-secondary)">All caught up!</span>
+        <span style="font-size:13px">No more tasks in your stack.</span>
+      </div>
+    </div>
+
+    <div class="bottom-nav">
+      <button class="nav-action" id="laterBtn">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 7H2M6 3L2 7l4 4"/></svg>
+        Later
+      </button>
+      <div class="nav-count" id="navDots"></div>
+      <button class="nav-action" id="doneBtn">
+        Done
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 7l3.5 3.5L11.5 4"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- TIMER VIEW -->
+  <div class="timer-view" id="timerView">
+    <button class="timer-back" id="timerBack">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3L5 8l5 5"/></svg>
+      Back to stack
+    </button>
+    <div class="timer-course" id="timerCourse">CS 6750</div>
+    <div class="timer-task-title" id="timerTitle">Task title</div>
+    <div class="timer-circle-wrap">
+      <svg class="timer-svg" width="200" height="200" viewBox="0 0 200 200">
+        <circle class="timer-ring-bg" cx="100" cy="100" r="88"/>
+        <circle class="timer-ring-fg" id="timerRing" cx="100" cy="100" r="88" stroke-dasharray="553" stroke-dashoffset="0"/>
+      </svg>
+      <div class="timer-inner">
+        <div class="timer-digits" id="timerDigits">20:00</div>
+        <div class="timer-mode-label" id="timerModeLabel">Focus session</div>
+      </div>
+    </div>
+    <button class="timer-play-btn" id="playBtn">
+      <svg id="playIcon" width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l10 5.5-10 5.5V4.5z"/></svg>
+    </button>
+    <div class="session-label" id="sessionLabel">SESSION 1 OF 4</div>
+    <div class="session-dots" id="sessionDots"></div>
+    <div class="overall-progress-wrap">
+      <div class="overall-progress-header">
+        <span class="overall-progress-label">Overall Progress</span>
+        <span class="overall-progress-val" id="overallVal">0 / 20 min</span>
+      </div>
+      <div class="overall-track"><div class="overall-fill" id="overallFill" style="width:45%"></div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <span style="font-size:12px;color:var(--text-muted)" id="progressTaskName">Task</span>
+        <span style="font-size:12px;color:var(--text-muted)" id="progressTaskPct">0% complete</span>
+      </div>
+      <button class="end-session-btn" id="endSessionBtn">End Session &amp; Return to Stack</button>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR BOTTOM SHEET -->
+<div class="cal-overlay" id="calOverlay">
+  <div class="cal-sheet">
+    <div class="cal-handle"></div>
+    <div class="cal-top">
+      <span class="cal-top-title">Week at a glance</span>
+      <button class="cal-close" id="calClose">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2l10 10M12 2L2 12"/></svg>
+      </button>
+    </div>
+
+    <!-- 7-day grid -->
+    <div class="week-grid" id="weekGrid"></div>
+
+    <div class="cal-divider"></div>
+
+    <!-- Today contextual alert -->
+    <div class="today-alert" id="todayAlert">
+      <div class="alert-dot" id="alertDot"></div>
+      <div class="alert-text" id="alertText"></div>
+    </div>
+
+    <!-- All completed banner -->
+    <div id="calAllDone" style="display:none; flex-direction:column; align-items:center; justify-content:center; padding: 48px 24px; text-align:center; gap:12px;">
+      <div style="width:52px;height:52px;border-radius:50%;background:var(--green-bg);display:flex;align-items:center;justify-content:center;font-size:24px;">✓</div>
+      <div style="font-size:16px;font-weight:600;letter-spacing:-0.3px;">All tasks completed!</div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.6;">You've cleared your entire week.<br>Take a breather — you've earned it.</div>
+    </div>
+
+    <!-- Selected day detail -->
+    <div class="day-detail-hdr" id="dayDetailHdr"></div>
+    <div class="task-list" id="taskList"></div>
+  </div>
+</div>
+
+<!-- UNDO TOAST -->
+<div class="undo-toast" id="undoToast">
+  <span class="undo-toast-label">Moved</span>
+  <span class="undo-toast-task" id="undoToastTask"></span>
+  <button class="undo-btn" id="undoToastBtn">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5.5A4 4 0 1 1 4.5 9"/><path d="M2 3v2.5h2.5"/></svg>
+    Undo
+  </button>
+</div>
+
+<script>
+// ── DATA ──
+// dueDay: 0=Mon … 6=Sun (this week). 7 = next week
+const TASKS = [
+  { id:1, course:"CS 6750",   title:"Team Project Check-In 2",            due:"Monday",    dueDay:0, urgentDue:true,  timeLeft:"3h remaining", desc:"Complete the second check-in for the team project. Review peer feedback, update design rationale, and prepare presentation slides.", progress:45, gradeWeight:"5% of grade",  progressLabel:"TEAM PROJECT",  sessions:4, sessionMins:60 },
+  { id:2, course:"CS 6750",   title:"Final Project — Prototype",           due:"Friday",    dueDay:4, urgentDue:false, timeLeft:"5 days left",   desc:"Build out the high-fidelity prototype from your wireframes. Integrate real interactions and prepare for usability testing next week.", progress:90, gradeWeight:"25% of grade", progressLabel:"FINAL PROJECT", sessions:4, sessionMins:20 },
+  { id:3, course:"ISYE 6501", title:"Homework 7 — Regression",             due:"Tuesday",   dueDay:1, urgentDue:false, timeLeft:"1 day left",    desc:"Complete problems 3–6 covering logistic regression and cross-validation. Upload your R Markdown report to Gradescope.",           progress:20, gradeWeight:"8% of grade",  progressLabel:"HOMEWORK",      sessions:3, sessionMins:45 },
+  { id:4, course:"MGT 6748",  title:"Case Study Analysis",                 due:"Next week", dueDay:7, urgentDue:false, timeLeft:"8 days left",   desc:"Analyze the Zara supply chain case. Identify three key strategic decisions and propose alternatives with supporting data.",           progress:0,  gradeWeight:"12% of grade", progressLabel:"CASE STUDY",    sessions:2, sessionMins:60 },
+  { id:5, course:"CS 7641",   title:"Assignment 3 — Unsupervised Learning",due:"Sunday",    dueDay:6, urgentDue:false, timeLeft:"4 days left",   desc:"Implement K-means and EM clustering on the two datasets. Produce analysis report comparing dimensionality reduction methods.",           progress:60, gradeWeight:"15% of grade", progressLabel:"ASSIGNMENT",    sessions:5, sessionMins:30 },
+  { id:6, course:"MATH 6014", title:"Problem Set 4",                       due:"Thursday",  dueDay:3, urgentDue:false, timeLeft:"3 days left",   desc:"Solve problems from Chapter 8 on linear transformations and eigenspaces. Show all work for partial credit.",                          progress:10, gradeWeight:"6% of grade",  progressLabel:"PROBLEM SET",   sessions:2, sessionMins:50 },
+  { id:7, course:"CS 6750",   title:"Reading Response 8",                  due:"Wednesday", dueDay:2, urgentDue:false, timeLeft:"2 days left",   desc:"Write a 300-word response to the week 8 readings on distributed cognition. Post to the course discussion board by midnight.",         progress:0,  gradeWeight:"2% of grade",  progressLabel:"READING",       sessions:1, sessionMins:30 },
+  { id:8, course:"ISYE 6501", title:"Quiz 5 Preparation",                  due:"Thursday",  dueDay:3, urgentDue:false, timeLeft:"3 days left",   desc:"Review lecture slides and practice problems for Quiz 5 covering classification and SVM methods.",                                   progress:30, gradeWeight:"4% of grade",  progressLabel:"QUIZ PREP",     sessions:2, sessionMins:40 },
+  { id:9, course:"CS 7641",   title:"Paper Review — Neural Nets",          due:"Monday",    dueDay:0, urgentDue:true,  timeLeft:"Today",         desc:"Read and annotate the assigned paper on neural architecture search. Submit a 200-word critique by end of day.",                        progress:0,  gradeWeight:"3% of grade",  progressLabel:"PAPER REVIEW",  sessions:1, sessionMins:40 },
+];
+
+const DAY_SHORT  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAY_FULL   = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTH_FULL  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+// Derive today's position in a Mon=0…Sun=6 week from the real system date
+const _today = new Date();
+const _jsDay = _today.getDay(); // 0=Sun, 1=Mon … 6=Sat
+const TODAY_DAY = _jsDay === 0 ? 6 : _jsDay - 1; // convert → Mon=0…Sun=6
+
+// Find the Monday of the current week
+const _monday = new Date(_today);
+_monday.setDate(_today.getDate() - TODAY_DAY);
+
+// Build per-day date numbers and month abbreviations for Mon–Sun
+const DAY_DATES  = Array.from({length:7}, (_, i) => { const d = new Date(_monday); d.setDate(_monday.getDate() + i); return d.getDate(); });
+const DAY_MONTHS = Array.from({length:7}, (_, i) => { const d = new Date(_monday); d.setDate(_monday.getDate() + i); return MONTH_NAMES[d.getMonth()]; });
+
+const STACK_TASKS = TASKS.filter(t => t.dueDay <= 6).slice(0,6);
+const STACK_IDS   = new Set(STACK_TASKS.map(t => t.id));
+let taskQueue   = [...STACK_TASKS];
+let completedIds = new Set();
+let history     = [];
+let toastTimer  = null;
+let isDragging  = false, startX = 0, startY = 0, currentX = 0;
+let activeTask  = null;
+let timerInterval = null, timerRunning = false;
+let timerSec = 0, timerTotal = 0, curSession = 1, totalSess = 4, isBreak = false;
+let calSelDay   = TODAY_DAY;
+
+// ── ELEMENTS ──
+const stackView   = document.getElementById('stackView');
+const timerView   = document.getElementById('timerView');
+const stackScene  = document.getElementById('stackScene');
+const emptyState  = document.getElementById('emptyState');
+const navDots     = document.getElementById('navDots');
+const headerSub   = document.getElementById('headerSub');
+const undoBtn     = document.getElementById('undoBtn');
+const undoToast   = document.getElementById('undoToast');
+const undoToastTask = document.getElementById('undoToastTask');
+const undoToastBtn  = document.getElementById('undoToastBtn');
+const calBtn      = document.getElementById('calBtn');
+const calOverlay  = document.getElementById('calOverlay');
+const calClose    = document.getElementById('calClose');
+const weekGrid    = document.getElementById('weekGrid');
+const todayAlert  = document.getElementById('todayAlert');
+const alertDot    = document.getElementById('alertDot');
+const alertText   = document.getElementById('alertText');
+const dayDetailHdr= document.getElementById('dayDetailHdr');
+const taskList    = document.getElementById('taskList');
+const timerBack   = document.getElementById('timerBack');
+const playBtn     = document.getElementById('playBtn');
+const playIcon    = document.getElementById('playIcon');
+const timerDigits = document.getElementById('timerDigits');
+const timerModeLabel = document.getElementById('timerModeLabel');
+const timerRing   = document.getElementById('timerRing');
+const sessionLabel  = document.getElementById('sessionLabel');
+const sessionDots   = document.getElementById('sessionDots');
+const overallFill   = document.getElementById('overallFill');
+const overallVal    = document.getElementById('overallVal');
+const progressTaskName = document.getElementById('progressTaskName');
+const progressTaskPct  = document.getElementById('progressTaskPct');
+const endSessionBtn    = document.getElementById('endSessionBtn');
+
+// ── CARD STACK ──
+function buildCard(task, index) {
+  const card = document.createElement('div');
+  card.className = `task-card card-${index}`;
+  card.dataset.id = task.id;
+  const uc = task.urgentDue ? 'due-urgent' : '';
+  card.innerHTML = `
+    <div class="swipe-hint left">Save for Later</div>
+    <div class="swipe-hint right">Complete ✓</div>
+    <div class="card-course-tag">${task.course}</div>
+    <div class="card-title">${task.title}</div>
+    <div class="card-meta">
+      <span class="meta-pill ${uc}">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="M6 3.5V6l1.5 1.5"/></svg>
+        Due ${task.due}
+      </span>
+      <span class="meta-pill">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="M6 3v3.5l2 1"/></svg>
+        ${task.timeLeft}
+      </span>
+      <span class="grade-badge">${task.gradeWeight}</span>
+    </div>
+    <div class="card-desc">${task.desc}</div>
+    <div class="progress-block">
+      <div class="progress-header">
+        <span class="progress-label">${task.progressLabel}</span>
+        <span class="progress-pct">${task.progress}% complete</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${task.progress}%"></div></div>
+    </div>
+    <button class="start-btn" data-id="${task.id}">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 2.5l9 4.5-9 4.5V2.5z"/></svg>
+      Start · ${task.sessionMins} min session
+    </button>`;
+  return card;
+}
+
+function renderStack() {
+  stackScene.querySelectorAll('.task-card').forEach(c => c.remove());
+  if (!taskQueue.length) {
+    emptyState.classList.add('show'); navDots.innerHTML = '';
+    headerSub.textContent = 'All done! Great work.'; return;
+  }
+  emptyState.classList.remove('show');
+  headerSub.textContent = `${taskQueue.length} task${taskQueue.length > 1 ? 's' : ''} · ${sortLabels[currentSort] || 'Sorted by due date'}`;
+  const show = Math.min(3, taskQueue.length);
+  for (let i = show - 1; i >= 0; i--) stackScene.appendChild(buildCard(taskQueue[i], i));
+  renderDots();
+  attachDrag(stackScene.querySelector('.card-0'));
+  attachStartBtn(stackScene.querySelector('.card-0'));
+}
+
+function renderDots() {
+  navDots.innerHTML = '';
+  for (let i = 0; i < Math.min(5, taskQueue.length); i++) {
+    const d = document.createElement('div');
+    d.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    navDots.appendChild(d);
+  }
+}
+
+function dismissTop(dir) {
+  const top = stackScene.querySelector('.card-0');
+  if (!top) return;
+  top.classList.remove('dragging'); top.style.transform = '';
+  top.classList.add(dir === 'left' ? 'fly-left' : 'fly-right');
+  const snap = { queue: [...taskQueue], completedIds: new Set(completedIds), dir };
+  const gone = taskQueue.shift();
+  if (dir === 'left') taskQueue.push(gone);
+  else completedIds.add(gone.id); // right-swipe = completed
+  history.push(snap); updateUndoBtn(); showToast(gone);
+  setTimeout(renderStack, 340);
+}
+
+function updateUndoBtn() { undoBtn.disabled = !history.length; }
+
+function showToast(task) {
+  clearTimeout(toastTimer);
+  undoToastTask.textContent = task.title;
+  undoToast.classList.add('visible');
+  toastTimer = setTimeout(() => undoToast.classList.remove('visible'), 4000);
+}
+
+function performUndo() {
+  if (!history.length) return;
+  const prev = history.pop(); taskQueue = prev.queue; completedIds = prev.completedIds;
+  updateUndoBtn(); clearTimeout(toastTimer); undoToast.classList.remove('visible');
+  renderStack();
+  const top = stackScene.querySelector('.card-0');
+  if (top) {
+    const fc = prev.dir === 'left' ? 'fly-left' : 'fly-right';
+    top.classList.add(fc); top.style.transition = 'none';
+    requestAnimationFrame(() => requestAnimationFrame(() => { top.classList.remove(fc); top.style.transition = ''; }));
+  }
+}
+
+undoBtn.addEventListener('click', performUndo);
+undoToastBtn.addEventListener('click', performUndo);
+document.getElementById('laterBtn').addEventListener('click', () => dismissTop('left'));
+document.getElementById('doneBtn').addEventListener('click', () => dismissTop('right'));
+
+function attachDrag(card) {
+  if (!card) return;
+  const hl = card.querySelector('.swipe-hint.left'), hr = card.querySelector('.swipe-hint.right');
+  function onStart(e) { isDragging = true; startX = (e.touches||[e])[0].clientX; startY = (e.touches||[e])[0].clientY; card.classList.add('dragging'); }
+  function onMove(e) {
+    if (!isDragging) return;
+    const dx = (e.touches||[e])[0].clientX - startX, dy = (e.touches||[e])[0].clientY - startY;
+    if (Math.abs(dy) > Math.abs(dx) * 1.5) return;
+    e.preventDefault(); currentX = dx;
+    card.style.transform = `translateX(${dx}px) rotate(${dx * 0.04}deg)`;
+    const r = Math.min(Math.abs(dx)/80, 1);
+    hl.style.opacity = dx < -20 ? r : 0; hr.style.opacity = dx > 20 ? r : 0;
+  }
+  function onEnd() {
+    if (!isDragging) return; isDragging = false; card.classList.remove('dragging');
+    hl.style.opacity = 0; hr.style.opacity = 0;
+    if (currentX < -80) dismissTop('left');
+    else if (currentX > 80) dismissTop('right');
+    else card.style.transform = '';
+    currentX = 0;
+  }
+  card.addEventListener('mousedown', onStart);
+  card.addEventListener('touchstart', onStart, { passive: true });
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('mouseup', onEnd);
+  window.addEventListener('touchend', onEnd);
+}
+
+function attachStartBtn(card) {
+  if (!card) return;
+  const btn = card.querySelector('.start-btn');
+  if (!btn) return;
+  btn.addEventListener('click', e => { e.stopPropagation(); openTimer(TASKS.find(t => t.id === +btn.dataset.id) || taskQueue[0]); });
+}
+
+// ── CALENDAR ──
+function urgency(task) {
+  if (task.dueDay === TODAY_DAY || task.urgentDue) return 'high';
+  if (task.dueDay <= TODAY_DAY + 2) return 'med';
+  return 'low';
+}
+function tasksForDay(d) { return TASKS.filter(t => t.dueDay === d && STACK_IDS.has(t.id) && !completedIds.has(t.id)); }
+function loadScore(d) {
+  const ts = tasksForDay(d); if (!ts.length) return 0;
+  const total = ts.reduce((s,t) => s + (1 - t.progress/100) * t.sessions * t.sessionMins, 0);
+  return Math.min(total / 240, 1); // 240 min = heavy
+}
+function loadBarColor(l) { return l > 0.65 ? 'var(--red-mid)' : l > 0.3 ? 'var(--amber-mid)' : l > 0 ? 'var(--green-mid)' : 'var(--surface-alt)'; }
+
+function openCalendar() {
+  calBtn.classList.add('active');
+  calOverlay.classList.add('open');
+  calSelDay = TODAY_DAY;
+
+  // Check if ALL week tasks are completed
+  const allDone = STACK_TASKS.length > 0 && STACK_TASKS.every(t => completedIds.has(t.id));
+  const calAllDone = document.getElementById('calAllDone');
+  const weekGrid_ = document.getElementById('weekGrid');
+  const calDivider = weekGrid_.nextElementSibling;
+
+  if (allDone) {
+    weekGrid_.style.display = 'none';
+    calDivider.style.display = 'none';
+    todayAlert.style.display = 'none';
+    dayDetailHdr.style.display = 'none';
+    taskList.style.display = 'none';
+    calAllDone.style.display = 'flex';
+  } else {
+    weekGrid_.style.display = '';
+    calDivider.style.display = '';
+    todayAlert.style.display = '';
+    dayDetailHdr.style.display = '';
+    taskList.style.display = '';
+    calAllDone.style.display = 'none';
+    renderWeekGrid();
+    renderTodayAlert();
+    renderDayDetail(TODAY_DAY);
+  }
+}
+function closeCalendar() { calBtn.classList.remove('active'); calOverlay.classList.remove('open'); }
+
+calBtn.addEventListener('click', openCalendar);
+calClose.addEventListener('click', closeCalendar);
+calOverlay.addEventListener('click', e => { if (e.target === calOverlay) closeCalendar(); });
+
+function renderWeekGrid() {
+  weekGrid.innerHTML = '';
+  for (let d = 0; d < 7; d++) {
+    const count = tasksForDay(d).length;
+    const load  = loadScore(d);
+    const barH  = count ? Math.max(4, Math.round(load * 44)) : 4;
+    const col   = document.createElement('div');
+    col.className = 'day-col' + (d === TODAY_DAY ? ' today' : '') + (d === calSelDay ? ' selected' : '');
+    col.innerHTML = `
+      <span class="day-lbl">${DAY_SHORT[d]}</span>
+      <div class="day-num-circle">${DAY_DATES[d]}</div>
+      <div class="day-bar-area">
+        <div class="day-bar" style="height:${barH}px;background:${loadBarColor(load)};"></div>
+        ${count ? `<span class="day-task-count">${count}</span>` : ''}
+      </div>`;
+    col.addEventListener('click', () => { calSelDay = d; renderWeekGrid(); renderDayDetail(d); });
+    weekGrid.appendChild(col);
+  }
+}
+
+function renderTodayAlert() {
+  const todayTasks = tasksForDay(TODAY_DAY);
+  const urgentOnes = todayTasks.filter(t => t.urgentDue || t.dueDay === TODAY_DAY);
+  todayAlert.className = 'today-alert';
+  if (!todayTasks.length) {
+    todayAlert.classList.add('alert-neutral');
+    alertDot.className = 'alert-dot gray';
+    alertText.innerHTML = `<strong>Nothing due today.</strong> Use this time to get ahead on upcoming work.`;
+  } else if (urgentOnes.length) {
+    todayAlert.classList.add('alert-urgent');
+    alertDot.className = 'alert-dot red';
+    alertText.innerHTML = `<strong>${urgentOnes.length} task${urgentOnes.length > 1 ? 's' : ''} due today.</strong> Start with these to stay on track.`;
+  } else {
+    todayAlert.classList.add('alert-ok');
+    alertDot.className = 'alert-dot green';
+    alertText.innerHTML = `<strong>${todayTasks.length} task${todayTasks.length > 1 ? 's' : ''} today.</strong> You're in a good position — keep the momentum going.`;
+  }
+}
+
+function renderDayDetail(d) {
+  const isToday = d === TODAY_DAY;
+  const label   = isToday ? 'Today' : DAY_FULL[d];
+  const tasks   = tasksForDay(d);
+  const sorted  = [...tasks].sort((a,b) => { const o={high:0,med:1,low:2}; return o[urgency(a)] - o[urgency(b)]; });
+
+  dayDetailHdr.innerHTML = `
+    <span class="detail-date-label">${label}, ${DAY_MONTHS[d]} ${DAY_DATES[d]}</span>
+    <span class="detail-count-label">${tasks.length} task${tasks.length !== 1 ? 's' : ''}</span>`;
+
+  taskList.innerHTML = '';
+
+  if (!sorted.length) {
+    taskList.innerHTML = `<div class="no-tasks-msg"><span class="emoji">🌿</span>Nothing due ${isToday ? 'today' : 'this day'}. A clear runway!</div>`;
+    return;
+  }
+
+  sorted.forEach(task => {
+    const urg = urgency(task);
+    const urgLabel = urg === 'high' ? (isToday ? 'Due today' : 'Urgent') : urg === 'med' ? 'Due soon' : 'Upcoming';
+    const row = document.createElement('div');
+    row.className = `cal-task-row urgency-${urg}`;
+    row.innerHTML = `
+      <div class="cal-task-top">
+        <span class="cal-task-title">${task.title}</span>
+        <span class="urg-badge urg-${urg}">${urgLabel}</span>
+      </div>
+      <div class="cal-task-meta">
+        <span class="cal-meta-course">${task.course}</span>
+        <span class="cal-meta-time">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5.5" cy="5.5" r="4"/><path d="M5.5 3.5v2l1.2 1.2"/></svg>
+          ${task.sessions}×${task.sessionMins}min
+        </span>
+        <span class="cal-meta-grade">${task.gradeWeight}</span>
+      </div>
+      <div class="cal-prog-row">
+        <span class="cal-prog-lbl">${task.progressLabel}</span>
+        <span class="cal-prog-pct">${task.progress}%</span>
+      </div>
+      <div class="cal-prog-track"><div class="cal-prog-fill pfill-${urg}" style="width:${task.progress}%"></div></div>`;
+    row.addEventListener('click', () => { closeCalendar(); openTimer(task); });
+    taskList.appendChild(row);
+  });
+
+  // CTA for today's top task
+  if (isToday && sorted.length) {
+    const top = sorted[0];
+    const cta = document.createElement('button');
+    cta.className = 'focus-cta';
+    cta.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 2.5l9 4.5-9 4.5V2.5z"/></svg> Focus now on "${top.title.split('—')[0].trim()}"`;
+    cta.addEventListener('click', () => { closeCalendar(); openTimer(top); });
+    taskList.appendChild(cta);
+  }
+}
+
+// ── TIMER ──
+function openTimer(task) {
+  activeTask = task; totalSess = task.sessions; curSession = 1; isBreak = false;
+  timerSec = task.sessionMins * 60; timerTotal = timerSec;
+  document.getElementById('timerCourse').textContent = task.course;
+  document.getElementById('timerTitle').textContent  = task.title;
+  progressTaskName.textContent = task.progressLabel;
+  progressTaskPct.textContent  = task.progress + '% complete';
+  overallFill.style.width = task.progress + '%';
+  overallVal.textContent = `0 / ${totalSess * task.sessionMins} min`;
+  renderSessionDots(); updateTimerDisplay();
+  stackView.classList.add('hidden'); timerView.classList.add('active');
+  timerRunning = false; setPlayIcon(false);
+}
+function closeTimer() {
+  clearInterval(timerInterval); timerRunning = false;
+  timerView.classList.remove('active'); stackView.classList.remove('hidden');
+}
+function renderSessionDots() {
+  sessionDots.innerHTML = '';
+  sessionLabel.textContent = `SESSION ${curSession} OF ${totalSess}`;
+  for (let i = 1; i <= totalSess; i++) {
+    const d = document.createElement('div');
+    d.className = 'session-dot' + (i < curSession ? ' done' : i === curSession ? ' active' : '');
+    d.textContent = i < curSession ? '✓' : i;
+    sessionDots.appendChild(d);
+  }
+}
+function updateTimerDisplay() {
+  const m = Math.floor(timerSec/60), s = timerSec%60;
+  timerDigits.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  timerRing.style.strokeDashoffset = 553 * (1 - timerSec/timerTotal);
+  timerModeLabel.textContent = isBreak ? 'Break time' : 'Focus session';
+}
+function setPlayIcon(p) {
+  playIcon.innerHTML = p
+    ? `<rect x="5" y="4" width="3" height="12" rx="1"/><rect x="12" y="4" width="3" height="12" rx="1"/>`
+    : `<path d="M6.5 4.5l10 5.5-10 5.5V4.5z"/>`;
+}
+playBtn.addEventListener('click', () => {
+  timerRunning = !timerRunning; setPlayIcon(timerRunning);
+  if (timerRunning) {
+    timerInterval = setInterval(() => {
+      if (timerSec > 0) { timerSec--; updateTimerDisplay(); }
+      else {
+        clearInterval(timerInterval); timerRunning = false;
+        if (!isBreak && curSession < totalSess) {
+          isBreak = true; timerSec = 300; timerTotal = 300; updateTimerDisplay(); setPlayIcon(false);
+        } else if (isBreak) {
+          isBreak = false; curSession++; timerSec = activeTask.sessionMins*60; timerTotal = timerSec;
+          renderSessionDots(); updateTimerDisplay(); setPlayIcon(false);
+        } else { timerDigits.textContent = 'Done!'; timerModeLabel.textContent = 'Session complete'; }
+      }
+    }, 1000);
+  } else clearInterval(timerInterval);
+});
+timerBack.addEventListener('click', closeTimer);
+endSessionBtn.addEventListener('click', closeTimer);
+
+// ── FILTER / SORT ──
+let currentSort = 'dueDay';
+const filterBtn = document.getElementById('filterBtn');
+const filterDropdown = document.getElementById('filterDropdown');
+
+function parsePct(str) { return parseFloat(str) || 0; }
+function sortTasks(queue, sort) {
+  return [...queue].sort((a, b) => {
+    if (sort === 'gradeWeight') return parsePct(b.gradeWeight) - parsePct(a.gradeWeight);
+    if (sort === 'timeToComplete') return (b.sessions * b.sessionMins) - (a.sessions * a.sessionMins);
+    if (sort === 'progress') return a.progress - b.progress;
+    return a.dueDay - b.dueDay; // dueDay default
+  });
+}
+const sortLabels = { dueDay: 'Sorted by due date', gradeWeight: 'Sorted by grade weight', timeToComplete: 'Sorted by time to complete', progress: 'Sorted by least progress' };
+
+filterBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  filterDropdown.classList.toggle('open');
+  filterBtn.classList.toggle('active', filterDropdown.classList.contains('open'));
+});
+document.addEventListener('click', () => { filterDropdown.classList.remove('open'); filterBtn.classList.remove('active'); });
+filterDropdown.addEventListener('click', e => e.stopPropagation());
+
+filterDropdown.querySelectorAll('.filter-option').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentSort = btn.dataset.sort;
+    filterDropdown.querySelectorAll('.filter-option').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    taskQueue = sortTasks(taskQueue, currentSort);
+    filterDropdown.classList.remove('open');
+    filterBtn.classList.remove('active');
+    headerSub.textContent = `${taskQueue.length} task${taskQueue.length !== 1 ? 's' : ''} · ${sortLabels[currentSort]}`;
+    renderStack();
+  });
+});
+
+// ── INIT ──
+renderStack();
+</script>
+</body>
+</html>
